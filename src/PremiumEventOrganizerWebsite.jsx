@@ -924,7 +924,7 @@ ${formData.description}`;
 
               <div className="flex items-center gap-4">
                 <Mail className="text-[#D4AF37]" />
-                <span>contact@royalevents.com</span>
+                <span>chigurupallypramod15@gmail.com</span>
               </div>
 
               <div className="flex items-center gap-4">
