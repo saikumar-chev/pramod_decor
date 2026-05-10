@@ -78,7 +78,7 @@ export default function PremiumEventOrganizerWebsite() {
         { name: "Arjun Family", review: "Amazing decorations and event coordination. Highly recommended for premium celebrations." },
         { name: "Karthik & Sneha", review: "Our engagement event looked magical. Guests loved every moment." }
       ],
-      location: "Itikyala(V), Jagadevpur(M), Siddiper(D), Telangana 502279",
+      location: "Itikyala(V), Jagadevpur(M), Siddipet(D), Telangana 502279",
       availability: "Available for Destination Events",
       formName: "Full Name",
       formEmail: "Email Address",
