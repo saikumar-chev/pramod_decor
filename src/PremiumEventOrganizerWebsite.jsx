@@ -92,7 +92,7 @@ export default function PremiumEventOrganizerWebsite() {
       formDescribe: "Describe Your Event",
       formSubmit: "Submit Inquiry",
       footerDesc: "Premium Traditional Event Organizer for Vivaha, Haldi, Engagement, Sangeeth & Celebrations.",
-      footerRights: "© 2026 ShubhEvents Studio. All Rights Reserved."
+      footerRights: "© 2026 Pramod Event Decors. All Rights Reserved."
     },
     TE: {
       home: "హోమ్", events: "ఈవెంట్స్", services: "సేవలు", gallery: "గ్యాలరీ", contact: "సంప్రదించండి", back: "వెనుకకు",
@@ -144,7 +144,7 @@ export default function PremiumEventOrganizerWebsite() {
       formDescribe: "మీ ఈవెంట్‌ను వివరించండి",
       formSubmit: "విచారణ సమర్పించండి",
       footerDesc: "వివాహం, పసుపు, నిశ్చితార్థం, సంగీత్ & వేడుకల కోసం ప్రీమియం సాంప్రదాయ ఈవెంట్ ఆర్గనైజర్.",
-      footerRights: "© 2026 ShubhEvents Studio. సర్వ హక్కులు ప్రత్యేకించబడినవి."
+      footerRights: "© 2026 Pramod Event Decors. సర్వ హక్కులు ప్రత్యేకించబడినవి."
     },
     HI: {
       home: "होम", events: "आयोजन", services: "सेवाएं", gallery: "गैलरी", contact: "संपर्क", back: "वापस",
@@ -544,7 +544,7 @@ ${formData.description}`;
       {/* Hero Section */}
       <section
         id="home"
-        className="relative h-screen flex items-center justify-center text-center px-6 overflow-hidden"
+        className="relative min-h-screen flex items-center justify-center text-center px-6 py-24 overflow-hidden"
       >
         <div
           className="absolute inset-0 bg-cover bg-center transition-transform duration-[10000ms] hover:scale-105"
@@ -554,7 +554,7 @@ ${formData.description}`;
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#090909_120%)]"></div>
         </div>
 
-        <div className="relative z-10 max-w-5xl flex flex-col items-center mt-16">
+        <div className="relative z-10 max-w-5xl flex flex-col items-center mt-8">
           <div className="flex items-center gap-4 mb-6">
             <div className="hidden md:block h-[1px] w-12 bg-gradient-to-r from-transparent to-[#D4AF37]"></div>
             <Sparkles className="text-[#D4AF37]" size={18} />
