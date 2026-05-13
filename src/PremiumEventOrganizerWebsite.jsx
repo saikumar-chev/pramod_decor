@@ -21,11 +21,9 @@ import {
   Plus,
   Quote,
   Edit3,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
-import vivahaMandap from "./assets/vivaha madap.jpg";
-import haldi1 from "./assets/haldi 1.jpg";
-import eng1 from "./assets/eng1.jpg";
-import reception1 from "./assets/reception1.jpg";
 import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase";
@@ -43,6 +41,8 @@ export default function PremiumEventOrganizerWebsite() {
   const [adminModal, setAdminModal] = useState({ isOpen: false, type: '', payload: null });
   const [modalForm, setModalForm] = useState({});
   const [isUploading, setIsUploading] = useState(false);
+  const [lightbox, setLightbox] = useState({ isOpen: false, url: '' });
+  const [zoom, setZoom] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -273,6 +273,19 @@ ${formData.description}`;
     setModalForm({});
   };
 
+  const openLightbox = (url) => {
+    setLightbox({ isOpen: true, url });
+    setZoom(1);
+  };
+
+  const closeLightbox = () => {
+    setLightbox({ isOpen: false, url: '' });
+    setZoom(1);
+  };
+
+  const handleZoomIn = (e) => { e.stopPropagation(); setZoom(prev => Math.min(prev + 0.5, 4)); };
+  const handleZoomOut = (e) => { e.stopPropagation(); setZoom(prev => Math.max(prev - 0.5, 0.5)); };
+
   const handleImageUpload = async (file) => {
     if (!file) return null;
     const storageRef = ref(storage, `uploads/${Date.now()}_${file.name}`);
@@ -294,8 +307,8 @@ ${formData.description}`;
           title: modalForm.title || "New Event",
           description: modalForm.description || "",
           price: modalForm.price || "",
-          categoryKey: (modalForm.title || "new").replace(/\s+/g, '-').toLowerCase(),
-          categoryDisplay: "Special",
+          categoryDisplay: modalForm.categoryDisplay || "Special",
+          categoryKey: (modalForm.categoryDisplay || modalForm.title || "new").replace(/\s+/g, '-').toLowerCase(),
           images: [imageUrl || "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop"]
         };
         const docRef = await addDoc(collection(db, "events"), newEvent);
@@ -304,7 +317,9 @@ ${formData.description}`;
         const updatedEvent = {
           title: modalForm.title,
           description: modalForm.description,
-          price: modalForm.price || ""
+          price: modalForm.price || "",
+          categoryDisplay: modalForm.categoryDisplay || "Special",
+          categoryKey: (modalForm.categoryDisplay || modalForm.title || "new").replace(/\s+/g, '-').toLowerCase(),
         };
         await updateDoc(doc(db, "events", adminModal.payload.id), updatedEvent);
         setDbEvents(prev => prev.map(ev => ev.id === adminModal.payload.id ? { ...ev, ...updatedEvent } : ev));
@@ -384,6 +399,9 @@ ${formData.description}`;
           {['add_event', 'edit_event'].includes(adminModal.type) && (
             <input type="text" placeholder="Price (e.g. Starting from ₹50,000) (Optional)" value={modalForm.price || ''} onChange={(e) => setModalForm({...modalForm, price: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" />
           )}
+          {['add_event', 'edit_event'].includes(adminModal.type) && (
+            <input type="text" placeholder="Event Type (e.g. Wedding, Haldi)" value={modalForm.categoryDisplay || ''} onChange={(e) => setModalForm({...modalForm, categoryDisplay: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" required />
+          )}
           {['add_testimonial', 'edit_testimonial'].includes(adminModal.type) && (
             <input type="text" placeholder="Client Name" value={modalForm.name || ''} onChange={(e) => setModalForm({...modalForm, name: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" required />
           )}
@@ -407,107 +425,48 @@ ${formData.description}`;
     </div>
   );
 
-  const events = [
-    {
-      title: t.eventsList[0].title,
-      categoryKey: "Wedding",
-      categoryDisplay: t.catWedding,
-      price: t.eventsList[0].price,
-      images: [
-        vivahaMandap,
-        eng1,
-        "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop",
-      ],
-      description: t.eventsList[0].desc,
-    },
-    {
-      title: t.eventsList[1].title,
-      categoryKey: "Haldi",
-      categoryDisplay: t.catHaldi,
-      price: t.eventsList[1].price,
-      images: [
-        haldi1,
-        "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1606216794074-735e91aa2c92?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1505236858219-8359eb29e329?q=80&w=800&auto=format&fit=crop",
-      ],
-      description: t.eventsList[1].desc,
-    },
-    {
-      title: t.eventsList[2].title,
-      categoryKey: "Sangeeth",
-      categoryDisplay: t.catSangeeth,
-      price: t.eventsList[2].price,
-      images: [
-        "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1478145046317-39f10e56b5e9?q=80&w=800&auto=format&fit=crop",
-      ],
-      description: t.eventsList[2].desc,
-    },
-    {
-      title: t.eventsList[3].title,
-      categoryKey: "Engagement",
-      categoryDisplay: t.catEngagement,
-      price: t.eventsList[3].price,
-      images: [
-        eng1,
-        "https://images.unsplash.com/photo-1544465544-1b71aee9fd46?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1515934751635-c81c6bc9a2d8?q=80&w=800&auto=format&fit=crop",
-      ],
-      description: t.eventsList[3].desc,
-    },
-    {
-      title: t.eventsList[4].title,
-      categoryKey: "Reception",
-      categoryDisplay: t.catReception,
-      price: t.eventsList[4].price,
-      images: [
-        reception1,
-        "https://images.unsplash.com/photo-1605281317010-fe5ffe798166?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?q=80&w=800&auto=format&fit=crop",
-      ],
-      description: t.eventsList[4].desc,
-    },
-    {
-      title: t.eventsList[5].title,
-      categoryKey: "Birthday",
-      categoryDisplay: t.catBirthday,
-      price: t.eventsList[5].price,
-      images: [
-        "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1528605248644-14dd04022da1?q=80&w=800&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1563294860076-26fc54041b6f?q=80&w=800&auto=format&fit=crop",
-      ],
-      description: t.eventsList[5].desc,
-    },
-  ];
+  const lightboxUI = lightbox.isOpen && (
+    <div 
+      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md"
+      onClick={closeLightbox}
+    >
+      <button 
+        onClick={closeLightbox} 
+        className="absolute top-6 right-6 text-white hover:text-[#D4AF37] z-50 bg-black/50 p-2 rounded-full transition"
+      >
+        <X size={24} />
+      </button>
+      <div 
+        className="absolute bottom-8 flex gap-6 z-50 bg-black/60 px-6 py-3 rounded-full border border-white/10 backdrop-blur-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button onClick={handleZoomOut} className="text-white hover:text-[#D4AF37] transition"><ZoomOut size={24} /></button>
+        <button onClick={handleZoomIn} className="text-white hover:text-[#D4AF37] transition"><ZoomIn size={24} /></button>
+      </div>
+      <div className="w-full h-full overflow-auto flex items-center justify-center p-4">
+        <img
+          src={lightbox.url}
+          alt="Enlarged view"
+          className="transition-transform duration-300 ease-out object-contain"
+          style={{ transform: `scale(${zoom})`, maxHeight: '90vh', maxWidth: '90vw' }}
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    </div>
+  );
 
-  const allEvents = [...events, ...dbEvents];
-  
+  const allEvents = dbEvents;
+
   const defaultServices = [
     { ...t.servicesList[0], icon: <Sparkles size={40} /> },
     { ...t.servicesList[1], icon: <Camera size={40} /> },
     { ...t.servicesList[2], icon: <Music size={40} /> },
     { ...t.servicesList[3], icon: <Utensils size={40} /> },
   ];
-  const allServices = [...defaultServices, ...dbServices.map(s => ({ ...s, icon: <Star size={40} /> }))];
+  const allServices = [...defaultServices, ...dbServices];
 
-  const defaultGallery = [
-    eng1, haldi1, reception1,
-    "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=800&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=80&w=800&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=800&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop",
-    "https://images.unsplash.com/photo-1469371670807-013ccf25f16a?q=80&w=800&auto=format&fit=crop",
-  ].map(url => ({ url, isStatic: true }));
-  const allGallery = [...defaultGallery, ...dbGallery];
-
-  const testimonials = t.testimonialsList;
-  const allTestimonials = [...testimonials.map(t => ({...t, isStatic: true})), ...dbTestimonials];
+  const allGallery = dbGallery;
+  const allTestimonials = [...t.testimonialsList.map(test => ({...test, isStatic: true})), ...dbTestimonials];
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -598,15 +557,19 @@ ${formData.description}`;
 
         <section className="pb-16 md:pb-24 px-4 md:px-16 max-w-7xl mx-auto">
           {/* Featured Large Image */}
-          <div className="relative w-full h-[40vh] md:h-[60vh] lg:h-[70vh] rounded-3xl md:rounded-[40px] overflow-hidden shadow-2xl mb-4 md:mb-6 group border border-white/10">
+          <div 
+            className="relative w-full h-[40vh] md:h-[60vh] lg:h-[70vh] rounded-3xl md:rounded-[40px] overflow-hidden shadow-2xl mb-4 md:mb-6 group border border-white/10 cursor-pointer"
+            onClick={() => openLightbox(selectedEventDetail.images?.[featuredImageIdx] || "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop")}
+          >
             <img 
-              src={selectedEventDetail.images[featuredImageIdx]} 
+              src={selectedEventDetail.images?.[featuredImageIdx] || "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop"} 
               alt={selectedEventDetail.title} 
               className="w-full h-full object-cover transition-transform duration-700 hover:scale-105" 
             />
-            {isAdmin && selectedEventDetail.id && selectedEventDetail.images.length > 1 && (
+            {isAdmin && selectedEventDetail.id && selectedEventDetail.images?.length > 1 && (
               <button
                 onClick={async () => {
+                  e.stopPropagation();
                   if(!window.confirm("Delete this image?")) return;
                   const updatedImages = selectedEventDetail.images.filter((_, i) => i !== featuredImageIdx);
                   await updateDoc(doc(db, "events", selectedEventDetail.id), { images: updatedImages });
@@ -624,7 +587,7 @@ ${formData.description}`;
 
           {/* Thumbnails Row */}
           <div className="flex gap-3 md:gap-4 overflow-x-auto pb-6 hide-scrollbar justify-start md:justify-center">
-            {selectedEventDetail.images.map((img, idx) => (
+            {selectedEventDetail.images?.map((img, idx) => (
               <div 
                 key={idx} 
                 onClick={() => setFeaturedImageIdx(idx)}
@@ -636,7 +599,7 @@ ${formData.description}`;
             {/* Admin Upload Thumbnail */}
             {isAdmin && selectedEventDetail.id && (
               <div 
-                onClick={() => openModal('add_image_to_event', { eventId: selectedEventDetail.id, images: selectedEventDetail.images })}
+                onClick={() => openModal('add_image_to_event', { eventId: selectedEventDetail.id, images: selectedEventDetail.images || [] })}
                 className="flex-shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-2xl hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg"
               >
                 <Plus size={24} className="text-[#D4AF37] mb-1" />
@@ -648,17 +611,9 @@ ${formData.description}`;
           <div className="mt-8 md:mt-12 text-center">
             <button 
                onClick={() => {
-                 const eventTypeMap = {
-                   "Wedding": "Vivaha (Wedding)",
-                   "Haldi": "Haldi",
-                   "Sangeeth": "Sangeeth",
-                   "Engagement": "Engagement",
-                   "Reception": "Reception",
-                   "Birthday": "Birthday"
-                 };
                  setFormData(prev => ({
                    ...prev,
-                   eventType: eventTypeMap[selectedEventDetail.categoryKey] || "",
+                   eventType: selectedEventDetail.categoryDisplay || "",
                    description: `I am interested in the ${selectedEventDetail.title} package.\n\nPackage Details: ${selectedEventDetail.description}\nPrice: ${selectedEventDetail.price}\n\nPlease contact me with more information.`
                  }));
                  window.location.hash = "contact";
@@ -684,6 +639,7 @@ ${formData.description}`;
           </svg>
         </a>
         {adminModalUI}
+        {lightboxUI}
       </div>
     );
   }
@@ -851,7 +807,7 @@ ${formData.description}`;
               className="cursor-pointer bg-[#131313] rounded-[30px] overflow-hidden border border-white/10 hover:border-[#D4AF37]/40 hover:-translate-y-3 transition duration-500 shadow-2xl"
             >
               <div className="h-56 md:h-72 overflow-hidden relative">
-                <img src={event.images[0]} alt={event.title} className="w-full h-full object-cover hover:scale-110 transition duration-700" />
+                <img src={event.images?.[0] || "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop"} alt={event.title} className="w-full h-full object-cover hover:scale-110 transition duration-700" />
                 <div className="absolute inset-0 bg-black/20 hover:bg-transparent transition duration-500"></div>
               </div>
 
@@ -916,7 +872,7 @@ ${formData.description}`;
 
               <div className="relative z-10">
                 <div className="mx-auto w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl bg-gradient-to-br from-[#D4AF37]/20 to-transparent border border-[#D4AF37]/30 mb-6 md:mb-8 group-hover:scale-110 group-hover:bg-[#D4AF37]/30 transition-all duration-500 text-[#D4AF37] shadow-lg">
-                  {service.icon}
+                  {service.icon || <Star size={40} />}
                 </div>
 
                 <h3 className="text-xl md:text-2xl font-bold mb-3 md:mb-4 text-white tracking-wide">
@@ -978,7 +934,8 @@ ${formData.description}`;
           {allGallery.map((image, index) => (
             <div
               key={image.id || index}
-              className="relative overflow-hidden rounded-2xl md:rounded-[30px] h-48 md:h-72 border border-white/10 group shadow-lg"
+              className="relative overflow-hidden rounded-2xl md:rounded-[30px] h-48 md:h-72 border border-white/10 group shadow-lg cursor-pointer"
+              onClick={() => openLightbox(image.url)}
             >
               <img
                 src={image.url}
@@ -987,9 +944,9 @@ ${formData.description}`;
               />
               
               {/* Admin Remove Button */}
-              {isAdmin && !image.isStatic && (
+              {isAdmin && image.id && (
                 <button
-                  onClick={() => handleDelete("gallery", image.id, setDbGallery)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete("gallery", image.id, setDbGallery); }}
                   className="absolute top-4 right-4 bg-red-600/80 hover:bg-red-600 p-3 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-lg"
                   title="Remove Image"
                 >
@@ -1167,12 +1124,10 @@ ${formData.description}`;
                 className="bg-black/40 border border-white/10 rounded-full px-5 md:px-6 py-3 md:py-4 outline-none focus:border-[#D4AF37] text-gray-400 text-sm md:text-base"
               >
                 <option value="" disabled className="bg-black text-white">{t.formSelectEvent}</option>
-                <option value="Vivaha (Wedding)" className="bg-black text-white">{t.formEventWedding}</option>
-                <option value="Haldi" className="bg-black text-white">{t.formEventHaldi}</option>
-                <option value="Sangeeth" className="bg-black text-white">{t.formEventSangeeth}</option>
-                <option value="Engagement" className="bg-black text-white">{t.formEventEngagement}</option>
-                <option value="Reception" className="bg-black text-white">{t.formEventReception}</option>
-                <option value="Birthday" className="bg-black text-white">{t.catBirthday}</option>
+                {[...new Set(allEvents.map(e => e.categoryDisplay))].filter(Boolean).map((type, idx) => (
+                  <option key={idx} value={type} className="bg-black text-white">{type}</option>
+                ))}
+                <option value="Other" className="bg-black text-white">Other</option>
               </select>
 
               <textarea
@@ -1248,6 +1203,7 @@ ${formData.description}`;
         </svg>
       </a>
       {adminModalUI}
+      {lightboxUI}
     </div>
   );
 }
