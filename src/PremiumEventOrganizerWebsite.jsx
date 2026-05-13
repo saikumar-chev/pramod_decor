@@ -26,6 +26,9 @@ import vivahaMandap from "./assets/vivaha madap.jpg";
 import haldi1 from "./assets/haldi 1.jpg";
 import eng1 from "./assets/eng1.jpg";
 import reception1 from "./assets/reception1.jpg";
+import { collection, addDoc, getDocs, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
 
 export default function PremiumEventOrganizerWebsite() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -33,6 +36,13 @@ export default function PremiumEventOrganizerWebsite() {
   const [language, setLanguage] = useState("EN");
   const [isAdmin, setIsAdmin] = useState(false);
   const [featuredImageIdx, setFeaturedImageIdx] = useState(0);
+  const [dbEvents, setDbEvents] = useState([]);
+  const [dbServices, setDbServices] = useState([]);
+  const [dbGallery, setDbGallery] = useState([]);
+  const [dbTestimonials, setDbTestimonials] = useState([]);
+  const [adminModal, setAdminModal] = useState({ isOpen: false, type: '', payload: null });
+  const [modalForm, setModalForm] = useState({});
+  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -233,6 +243,170 @@ ${formData.description}`;
     });
   };
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [ev, sv, gl, ts] = await Promise.all([
+          getDocs(collection(db, "events")),
+          getDocs(collection(db, "services")),
+          getDocs(collection(db, "gallery")),
+          getDocs(collection(db, "testimonials")),
+        ]);
+        setDbEvents(ev.docs.map(d => ({ id: d.id, ...d.data() })));
+        setDbServices(sv.docs.map(d => ({ id: d.id, ...d.data() })));
+        setDbGallery(gl.docs.map(d => ({ id: d.id, ...d.data() })));
+        setDbTestimonials(ts.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const openModal = (type, payload = null) => {
+    setAdminModal({ isOpen: true, type, payload });
+    setModalForm(payload || {});
+  };
+
+  const closeModal = () => {
+    setAdminModal({ isOpen: false, type: '', payload: null });
+    setModalForm({});
+  };
+
+  const handleImageUpload = async (file) => {
+    if (!file) return null;
+    const storageRef = ref(storage, `uploads/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  };
+
+  const handleModalSubmit = async (e) => {
+    e.preventDefault();
+    setIsUploading(true);
+    try {
+      let imageUrl = null;
+      if (modalForm.imageFile) {
+        imageUrl = await handleImageUpload(modalForm.imageFile);
+      }
+
+      if (adminModal.type === 'add_event') {
+        const newEvent = {
+          title: modalForm.title || "New Event",
+          description: modalForm.description || "",
+          price: modalForm.price || "",
+          categoryKey: (modalForm.title || "new").replace(/\s+/g, '-').toLowerCase(),
+          categoryDisplay: "Special",
+          images: [imageUrl || "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop"]
+        };
+        const docRef = await addDoc(collection(db, "events"), newEvent);
+        setDbEvents(prev => [...prev, { id: docRef.id, ...newEvent }]);
+      } else if (adminModal.type === 'edit_event') {
+        const updatedEvent = {
+          title: modalForm.title,
+          description: modalForm.description,
+          price: modalForm.price || ""
+        };
+        await updateDoc(doc(db, "events", adminModal.payload.id), updatedEvent);
+        setDbEvents(prev => prev.map(ev => ev.id === adminModal.payload.id ? { ...ev, ...updatedEvent } : ev));
+        if (selectedEventDetail?.id === adminModal.payload.id) {
+          setSelectedEventDetail(prev => ({ ...prev, ...updatedEvent }));
+        }
+      } else if (adminModal.type === 'add_image_to_event') {
+        if (!imageUrl) throw new Error("Image is required");
+        const updatedImages = [...adminModal.payload.images, imageUrl];
+        await updateDoc(doc(db, "events", adminModal.payload.eventId), { images: updatedImages });
+        setDbEvents(prev => prev.map(ev => ev.id === adminModal.payload.eventId ? { ...ev, images: updatedImages } : ev));
+        setSelectedEventDetail(prev => ({ ...prev, images: updatedImages }));
+      } else if (adminModal.type === 'add_service') {
+        const newService = { title: modalForm.title || "New Service", desc: modalForm.description || "" };
+        const docRef = await addDoc(collection(db, "services"), newService);
+        setDbServices(prev => [...prev, { id: docRef.id, ...newService }]);
+      } else if (adminModal.type === 'edit_service') {
+        const updatedService = { title: modalForm.title, desc: modalForm.description || modalForm.desc };
+        await updateDoc(doc(db, "services", adminModal.payload.id), updatedService);
+        setDbServices(prev => prev.map(s => s.id === adminModal.payload.id ? { ...s, ...updatedService } : s));
+      } else if (adminModal.type === 'add_gallery') {
+        if (!imageUrl) throw new Error("Image is required");
+        const newImg = { url: imageUrl };
+        const docRef = await addDoc(collection(db, "gallery"), newImg);
+        setDbGallery(prev => [...prev, { id: docRef.id, ...newImg }]);
+      } else if (adminModal.type === 'add_testimonial') {
+        const newTest = { name: modalForm.name || "Client", review: modalForm.review || "" };
+        const docRef = await addDoc(collection(db, "testimonials"), newTest);
+        setDbTestimonials(prev => [...prev, { id: docRef.id, ...newTest }]);
+      } else if (adminModal.type === 'edit_testimonial') {
+        const updatedTest = { name: modalForm.name, review: modalForm.review };
+        await updateDoc(doc(db, "testimonials", adminModal.payload.id), updatedTest);
+        setDbTestimonials(prev => prev.map(t => t.id === adminModal.payload.id ? { ...t, ...updatedTest } : t));
+      }
+      closeModal();
+    } catch (error) {
+      console.error("Error saving:", error);
+      alert("Failed to save. Please try again. " + error.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDelete = async (collectionName, id, stateUpdater) => {
+    if (!id) return alert("Cannot delete default static items.");
+    if (window.confirm("Are you sure you want to delete this item?")) {
+      await deleteDoc(doc(db, collectionName, id));
+      stateUpdater(prev => prev.filter(item => item.id !== id));
+    }
+  };
+
+  const getModalTitle = () => {
+    switch(adminModal.type) {
+      case 'add_event': return 'Add New Event';
+      case 'edit_event': return 'Edit Event';
+      case 'add_service': return 'Add Service';
+      case 'edit_service': return 'Edit Service';
+      case 'add_gallery': return 'Add Image to Gallery';
+      case 'add_testimonial': return 'Add Testimonial';
+      case 'edit_testimonial': return 'Edit Testimonial';
+      case 'add_image_to_event': return 'Upload Event Image';
+      default: return 'Admin Action';
+    }
+  };
+
+  const adminModalUI = adminModal.isOpen && (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="bg-[#111111] border border-[#D4AF37]/50 rounded-3xl p-6 md:p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
+        <h3 className="text-2xl font-bold text-[#D4AF37] mb-6">{getModalTitle()}</h3>
+        <form onSubmit={handleModalSubmit} className="flex flex-col gap-5">
+          {['add_event', 'edit_event', 'add_service', 'edit_service'].includes(adminModal.type) && (
+            <input type="text" placeholder="Title" value={modalForm.title || ''} onChange={(e) => setModalForm({...modalForm, title: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" required />
+          )}
+          {['add_event', 'edit_event', 'add_service', 'edit_service'].includes(adminModal.type) && (
+            <textarea placeholder="Description" value={modalForm.description || modalForm.desc || ''} onChange={(e) => setModalForm({...modalForm, description: e.target.value, desc: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" rows="3" required />
+          )}
+          {['add_event', 'edit_event'].includes(adminModal.type) && (
+            <input type="text" placeholder="Price (e.g. Starting from ₹50,000) (Optional)" value={modalForm.price || ''} onChange={(e) => setModalForm({...modalForm, price: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" />
+          )}
+          {['add_testimonial', 'edit_testimonial'].includes(adminModal.type) && (
+            <input type="text" placeholder="Client Name" value={modalForm.name || ''} onChange={(e) => setModalForm({...modalForm, name: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" required />
+          )}
+          {['add_testimonial', 'edit_testimonial'].includes(adminModal.type) && (
+            <textarea placeholder="Review" value={modalForm.review || ''} onChange={(e) => setModalForm({...modalForm, review: e.target.value})} className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none" rows="4" required />
+          )}
+          {['add_event', 'add_gallery', 'add_image_to_event'].includes(adminModal.type) && (
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Upload Image</label>
+              <input type="file" accept="image/*" onChange={(e) => setModalForm({...modalForm, imageFile: e.target.files[0]})} className="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#D4AF37]/10 file:text-[#D4AF37] hover:file:bg-[#D4AF37]/20" required={adminModal.type !== 'add_event'} />
+            </div>
+          )}
+          <div className="flex justify-end gap-3 mt-4">
+            <button type="button" onClick={closeModal} className="px-6 py-2 rounded-full border border-white/10 text-white hover:bg-white/5 transition">Cancel</button>
+            <button type="submit" disabled={isUploading} className="px-6 py-2 rounded-full bg-[#D4AF37] text-black font-bold hover:scale-105 transition disabled:opacity-50 disabled:scale-100">
+              {isUploading ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
   const events = [
     {
       title: t.eventsList[0].title,
@@ -312,14 +486,35 @@ ${formData.description}`;
     },
   ];
 
+  const allEvents = [...events, ...dbEvents];
+  
+  const defaultServices = [
+    { ...t.servicesList[0], icon: <Sparkles size={40} /> },
+    { ...t.servicesList[1], icon: <Camera size={40} /> },
+    { ...t.servicesList[2], icon: <Music size={40} /> },
+    { ...t.servicesList[3], icon: <Utensils size={40} /> },
+  ];
+  const allServices = [...defaultServices, ...dbServices.map(s => ({ ...s, icon: <Star size={40} /> }))];
+
+  const defaultGallery = [
+    eng1, haldi1, reception1,
+    "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=800&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=80&w=800&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=800&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1469371670807-013ccf25f16a?q=80&w=800&auto=format&fit=crop",
+  ].map(url => ({ url, isStatic: true }));
+  const allGallery = [...defaultGallery, ...dbGallery];
+
   const testimonials = t.testimonialsList;
+  const allTestimonials = [...testimonials.map(t => ({...t, isStatic: true})), ...dbTestimonials];
 
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
       if (hash.startsWith("#event-")) {
         const key = hash.replace("#event-", "");
-        const event = events.find((e) => e.categoryKey === key);
+        const event = allEvents.find((e) => e.categoryKey === key);
         if (event) {
           setSelectedEventDetail(event);
           setFeaturedImageIdx(0);
@@ -334,7 +529,7 @@ ${formData.description}`;
     handleHashChange();
 
     return () => window.removeEventListener("hashchange", handleHashChange);
-  }, [language]);
+  }, [language, dbEvents]);
 
   if (selectedEventDetail) {
     return (
@@ -363,17 +558,20 @@ ${formData.description}`;
         </nav>
 
         <section className="pt-24 md:pt-32 pb-8 md:pb-12 px-4 md:px-16 max-w-7xl mx-auto text-center relative group">
-          {isAdmin && (
+          {isAdmin && selectedEventDetail.id && (
             <div className="absolute top-28 right-0 md:right-8 flex flex-col gap-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20">
               <button
-                onClick={() => alert("Backend integration required to edit event title, description, and pricing.")}
+                onClick={() => openModal("edit_event", selectedEventDetail)}
                 className="bg-black/80 border border-white/10 hover:bg-[#D4AF37] hover:text-black p-3.5 rounded-full text-white backdrop-blur-sm shadow-lg transition"
                 title="Edit Event Content"
               >
                 <Edit3 size={20} />
               </button>
               <button
-                onClick={() => alert("Backend integration required to delete this entire event.")}
+                onClick={async () => {
+                  await handleDelete("events", selectedEventDetail.id, setDbEvents);
+                  window.location.hash = "";
+                }}
                 className="bg-red-600/80 hover:bg-red-600 p-3.5 rounded-full text-white backdrop-blur-sm shadow-lg transition"
                 title="Delete Event Package"
               >
@@ -391,9 +589,11 @@ ${formData.description}`;
           <p className="text-gray-300 max-w-2xl mx-auto text-base md:text-lg leading-relaxed mb-6">
             {selectedEventDetail.description}
           </p>
-          <p className="text-[#D4AF37] font-bold text-xl inline-block border border-[#D4AF37]/30 px-6 py-3 rounded-full bg-[#D4AF37]/5">
-            {selectedEventDetail.price}
-          </p>
+          {selectedEventDetail.price && (
+            <p className="text-[#D4AF37] font-bold text-xl inline-block border border-[#D4AF37]/30 px-6 py-3 rounded-full bg-[#D4AF37]/5">
+              {selectedEventDetail.price}
+            </p>
+          )}
         </section>
 
         <section className="pb-16 md:pb-24 px-4 md:px-16 max-w-7xl mx-auto">
@@ -404,9 +604,16 @@ ${formData.description}`;
               alt={selectedEventDetail.title} 
               className="w-full h-full object-cover transition-transform duration-700 hover:scale-105" 
             />
-            {isAdmin && (
+            {isAdmin && selectedEventDetail.id && selectedEventDetail.images.length > 1 && (
               <button
-                onClick={() => alert("Backend integration required to delete image.")}
+                onClick={async () => {
+                  if(!window.confirm("Delete this image?")) return;
+                  const updatedImages = selectedEventDetail.images.filter((_, i) => i !== featuredImageIdx);
+                  await updateDoc(doc(db, "events", selectedEventDetail.id), { images: updatedImages });
+                  setDbEvents(prev => prev.map(e => e.id === selectedEventDetail.id ? { ...e, images: updatedImages } : e));
+                  setSelectedEventDetail(prev => ({ ...prev, images: updatedImages }));
+                  setFeaturedImageIdx(0);
+                }}
                 className="absolute top-6 right-6 bg-red-600/80 hover:bg-red-600 p-4 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-lg"
                 title="Remove Image"
               >
@@ -427,9 +634,9 @@ ${formData.description}`;
               </div>
             ))}
             {/* Admin Upload Thumbnail */}
-            {isAdmin && (
+            {isAdmin && selectedEventDetail.id && (
               <div 
-                onClick={() => alert("Backend integration required to upload new images.")}
+                onClick={() => openModal('add_image_to_event', { eventId: selectedEventDetail.id, images: selectedEventDetail.images })}
                 className="flex-shrink-0 w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-2xl hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg"
               >
                 <Plus size={24} className="text-[#D4AF37] mb-1" />
@@ -476,6 +683,7 @@ ${formData.description}`;
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/>
           </svg>
         </a>
+        {adminModalUI}
       </div>
     );
   }
@@ -619,17 +827,6 @@ ${formData.description}`;
               <p className="text-gray-400 text-xs md:text-sm lg:text-base">{item[1]}</p>
             </div>
           ))}
-
-          {/* Admin Add New Event Package Card */}
-          {isAdmin && (
-            <div 
-              onClick={() => alert("Backend integration required to create a new event package and write its content.")}
-              className="flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-[30px] min-h-[420px] hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg"
-            >
-              <Plus size={40} className="text-[#D4AF37] mb-3" />
-              <span className="text-[#D4AF37] font-medium tracking-wide">Add New Event Package</span>
-            </div>
-          )}
         </div>
       </section>
 
@@ -645,9 +842,9 @@ ${formData.description}`;
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
-          {events.map((event, index) => (
+          {allEvents.map((event, index) => (
             <div
-              key={index}
+              key={event.id || index}
               onClick={() => {
                 window.location.hash = `event-${event.categoryKey}`;
               }}
@@ -668,16 +865,29 @@ ${formData.description}`;
                 <h3 className="text-xl md:text-2xl font-bold mb-2">{event.title}</h3>
 
                 <div className="flex items-center justify-between mt-3 md:mt-4">
-                  <p className="text-gray-400 font-medium text-sm md:text-base">
-                    {event.price}
-                  </p>
-                  <button className="text-[#D4AF37] hover:text-white transition duration-300 font-medium flex items-center gap-2">
+                  {event.price && (
+                    <p className="text-gray-400 font-medium text-sm md:text-base">
+                      {event.price}
+                    </p>
+                  )}
+                  <button className="text-[#D4AF37] hover:text-white transition duration-300 font-medium flex items-center gap-2 ml-auto">
                     {t.viewMore} →
                   </button>
                 </div>
               </div>
             </div>
           ))}
+
+          {/* Admin Add New Event Package Card */}
+          {isAdmin && (
+            <div 
+              onClick={() => openModal('add_event')}
+              className="flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-[30px] min-h-[350px] hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg"
+            >
+              <Plus size={40} className="text-[#D4AF37] mb-3" />
+              <span className="text-[#D4AF37] font-medium tracking-wide">Add New Event Package</span>
+            </div>
+          )}
         </div>
       </section>
 
@@ -696,26 +906,9 @@ ${formData.description}`;
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
-          {[
-            {
-              ...t.servicesList[0],
-              icon: <Sparkles size={40} />,
-            },
-            {
-              ...t.servicesList[1],
-              icon: <Camera size={40} />,
-            },
-            {
-              ...t.servicesList[2],
-              icon: <Music size={40} />,
-            },
-            {
-              ...t.servicesList[3],
-              icon: <Utensils size={40} />,
-            },
-          ].map((service, index) => (
+          {allServices.map((service, index) => (
             <div
-              key={index}
+              key={service.id || index}
               className="group relative bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] border border-white/10 rounded-[30px] md:rounded-[40px] p-6 md:p-10 text-center hover:border-[#D4AF37]/50 transition-all duration-500 hover:-translate-y-3 hover:shadow-[0_10px_40px_rgba(212,175,55,0.15)] overflow-hidden"
             >
               {/* Decorative background glow */}
@@ -736,17 +929,17 @@ ${formData.description}`;
               </div>
 
               {/* Admin Overlay */}
-              {isAdmin && (
+              {isAdmin && service.id && (
                 <div className="absolute top-4 right-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                   <button
-                    onClick={() => alert("Backend integration required to edit service.")}
+                    onClick={() => openModal('edit_service', service)}
                     className="bg-black/80 border border-white/10 hover:bg-[#D4AF37] hover:text-black p-2.5 rounded-full text-white backdrop-blur-sm shadow-lg transition"
                     title="Edit Service"
                   >
                     <Edit3 size={16} />
                   </button>
                   <button
-                    onClick={() => alert("Backend integration required to delete service.")}
+                    onClick={() => handleDelete("services", service.id, setDbServices)}
                     className="bg-red-600/80 hover:bg-red-600 p-2.5 rounded-full text-white backdrop-blur-sm shadow-lg transition"
                     title="Remove Service"
                   >
@@ -760,7 +953,7 @@ ${formData.description}`;
           {/* Admin Add Service Card */}
           {isAdmin && (
             <div 
-              onClick={() => alert("Backend integration required to add a new service.")}
+              onClick={() => openModal('add_service')}
               className="flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-[40px] p-10 hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg min-h-[320px]"
             >
               <Plus size={40} className="text-[#D4AF37] mb-3" />
@@ -782,30 +975,21 @@ ${formData.description}`;
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 max-w-7xl mx-auto">
-          {[
-            eng1,
-            haldi1,
-            reception1,
-            "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1522673607200-164d1b6ce486?q=80&w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop",
-            "https://images.unsplash.com/photo-1469371670807-013ccf25f16a?q=80&w=800&auto=format&fit=crop",
-          ].map((image, index) => (
+          {allGallery.map((image, index) => (
             <div
-              key={index}
+              key={image.id || index}
               className="relative overflow-hidden rounded-2xl md:rounded-[30px] h-48 md:h-72 border border-white/10 group shadow-lg"
             >
               <img
-                src={image}
+                src={image.url}
                 alt="Gallery"
                 className="w-full h-full object-cover hover:scale-110 transition duration-700"
               />
               
               {/* Admin Remove Button */}
-              {isAdmin && (
+              {isAdmin && !image.isStatic && (
                 <button
-                  onClick={() => alert("Backend integration required to delete image.")}
+                  onClick={() => handleDelete("gallery", image.id, setDbGallery)}
                   className="absolute top-4 right-4 bg-red-600/80 hover:bg-red-600 p-3 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm shadow-lg"
                   title="Remove Image"
                 >
@@ -818,7 +1002,7 @@ ${formData.description}`;
           {/* Admin Upload Card */}
           {isAdmin && (
             <div 
-              onClick={() => alert("Backend integration required to upload new gallery images.")}
+              onClick={() => openModal('add_gallery')}
               className="flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-[30px] h-72 hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg"
             >
               <Plus size={40} className="text-[#D4AF37] mb-3" />
@@ -840,9 +1024,9 @@ ${formData.description}`;
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 md:gap-8 max-w-7xl mx-auto">
-          {testimonials.map((item, index) => (
+          {allTestimonials.map((item, index) => (
             <div
-              key={index}
+              key={item.id || index}
               className="relative group bg-gradient-to-b from-[#1a1a1a] to-[#0a0a0a] border border-white/10 hover:border-[#D4AF37]/50 rounded-[30px] md:rounded-[40px] p-6 md:p-12 transition-all duration-500 shadow-2xl hover:shadow-[0_10px_40px_rgba(212,175,55,0.15)]"
             >
               <Quote className="absolute top-6 right-6 md:top-8 md:right-8 text-[#D4AF37] opacity-10 transition-opacity duration-500 group-hover:opacity-20 w-12 h-12 md:w-20 md:h-20" />
@@ -870,17 +1054,17 @@ ${formData.description}`;
               </div>
 
               {/* Admin Overlay */}
-              {isAdmin && (
+              {isAdmin && item.id && (
                 <div className="absolute top-6 right-6 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                   <button
-                    onClick={() => alert("Backend integration required to edit testimonial.")}
+                    onClick={() => openModal('edit_testimonial', item)}
                     className="bg-black/80 border border-white/10 hover:bg-[#D4AF37] hover:text-black p-3 rounded-full text-white backdrop-blur-sm shadow-lg transition"
                     title="Edit Testimonial"
                   >
                     <Edit3 size={18} />
                   </button>
                   <button
-                    onClick={() => alert("Backend integration required to delete testimonial.")}
+                    onClick={() => handleDelete("testimonials", item.id, setDbTestimonials)}
                     className="bg-red-600/80 hover:bg-red-600 p-3 rounded-full text-white backdrop-blur-sm shadow-lg transition"
                     title="Remove Testimonial"
                   >
@@ -894,7 +1078,7 @@ ${formData.description}`;
           {/* Admin Add Testimonial Card */}
           {isAdmin && (
             <div 
-              onClick={() => alert("Backend integration required to add a new testimonial.")}
+              onClick={() => openModal('add_testimonial')}
               className="flex flex-col items-center justify-center border-2 border-dashed border-[#D4AF37]/50 rounded-[40px] p-12 hover:bg-[#D4AF37]/10 transition duration-300 cursor-pointer shadow-lg min-h-[320px]"
             >
               <Plus size={40} className="text-[#D4AF37] mb-3" />
@@ -1063,6 +1247,7 @@ ${formData.description}`;
           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z"/>
         </svg>
       </a>
+      {adminModalUI}
     </div>
   );
 }
