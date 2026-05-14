@@ -50,6 +50,7 @@ export default function PremiumEventOrganizerWebsite() {
     eventType: "",
     description: "",
   });
+  const [dialog, setDialog] = useState({ isOpen: false, type: 'alert', message: '', inputValue: '', isPassword: false, onConfirm: null, onCancel: null });
 
   const translations = {
     EN: {
@@ -263,6 +264,25 @@ ${formData.description}`;
     fetchData();
   }, []);
 
+  const showDialog = (options) => {
+    return new Promise((resolve) => {
+      setDialog({
+        isOpen: true,
+        inputValue: '',
+        isPassword: false,
+        ...options,
+        onConfirm: (val) => {
+          setDialog(prev => ({ ...prev, isOpen: false }));
+          resolve(val !== undefined ? val : true);
+        },
+        onCancel: () => {
+          setDialog(prev => ({ ...prev, isOpen: false }));
+          resolve(false);
+        }
+      });
+    });
+  };
+
   const openModal = (type, payload = null) => {
     setAdminModal({ isOpen: true, type, payload });
     setModalForm(payload || {});
@@ -302,24 +322,56 @@ ${formData.description}`;
         imageUrl = await handleImageUpload(modalForm.imageFile);
       }
 
+      const autoTranslate = async (text, targetLang) => {
+        if (!text) return "";
+        try {
+          const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+          const data = await res.json();
+          return data[0].map(x => x[0]).join('');
+        } catch (error) {
+          console.error("Translation error:", error);
+          return text; // Fallback to original text if API fails
+        }
+      };
+
       if (adminModal.type === 'add_event') {
+        const title = modalForm.title || "New Event";
+        const desc = modalForm.description || "";
+        const cat = modalForm.categoryDisplay || "Special";
+
         const newEvent = {
-          title: modalForm.title || "New Event",
-          description: modalForm.description || "",
+          title: title,
+          title_TE: await autoTranslate(title, 'te'),
+          title_HI: await autoTranslate(title, 'hi'),
+          description: desc,
+          description_TE: await autoTranslate(desc, 'te'),
+          description_HI: await autoTranslate(desc, 'hi'),
           price: modalForm.price || "",
-          categoryDisplay: modalForm.categoryDisplay || "Special",
-          categoryKey: (modalForm.categoryDisplay || modalForm.title || "new").replace(/\s+/g, '-').toLowerCase(),
+          categoryDisplay: cat,
+          categoryDisplay_TE: await autoTranslate(cat, 'te'),
+          categoryDisplay_HI: await autoTranslate(cat, 'hi'),
+          categoryKey: (cat || title || "new").replace(/\s+/g, '-').toLowerCase(),
           images: [imageUrl || "https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=800&auto=format&fit=crop"]
         };
         const docRef = await addDoc(collection(db, "events"), newEvent);
         setDbEvents(prev => [...prev, { id: docRef.id, ...newEvent }]);
       } else if (adminModal.type === 'edit_event') {
+        const title = modalForm.title;
+        const desc = modalForm.description;
+        const cat = modalForm.categoryDisplay || "Special";
+
         const updatedEvent = {
-          title: modalForm.title,
-          description: modalForm.description,
+          title: title,
+          title_TE: await autoTranslate(title, 'te'),
+          title_HI: await autoTranslate(title, 'hi'),
+          description: desc,
+          description_TE: await autoTranslate(desc, 'te'),
+          description_HI: await autoTranslate(desc, 'hi'),
           price: modalForm.price || "",
-          categoryDisplay: modalForm.categoryDisplay || "Special",
-          categoryKey: (modalForm.categoryDisplay || modalForm.title || "new").replace(/\s+/g, '-').toLowerCase(),
+          categoryDisplay: cat,
+          categoryDisplay_TE: await autoTranslate(cat, 'te'),
+          categoryDisplay_HI: await autoTranslate(cat, 'hi'),
+          categoryKey: (cat || title || "new").replace(/\s+/g, '-').toLowerCase(),
         };
         await updateDoc(doc(db, "events", adminModal.payload.id), updatedEvent);
         setDbEvents(prev => prev.map(ev => ev.id === adminModal.payload.id ? { ...ev, ...updatedEvent } : ev));
@@ -333,11 +385,31 @@ ${formData.description}`;
         setDbEvents(prev => prev.map(ev => ev.id === adminModal.payload.eventId ? { ...ev, images: updatedImages } : ev));
         setSelectedEventDetail(prev => ({ ...prev, images: updatedImages }));
       } else if (adminModal.type === 'add_service') {
-        const newService = { title: modalForm.title || "New Service", desc: modalForm.description || "" };
+        const title = modalForm.title || "New Service";
+        const desc = modalForm.description || "";
+
+        const newService = { 
+          title: title, 
+          title_TE: await autoTranslate(title, 'te'),
+          title_HI: await autoTranslate(title, 'hi'),
+          desc: desc,
+          desc_TE: await autoTranslate(desc, 'te'),
+          desc_HI: await autoTranslate(desc, 'hi')
+        };
         const docRef = await addDoc(collection(db, "services"), newService);
         setDbServices(prev => [...prev, { id: docRef.id, ...newService }]);
       } else if (adminModal.type === 'edit_service') {
-        const updatedService = { title: modalForm.title, desc: modalForm.description || modalForm.desc };
+        const title = modalForm.title;
+        const desc = modalForm.description || modalForm.desc;
+
+        const updatedService = { 
+          title: title, 
+          title_TE: await autoTranslate(title, 'te'),
+          title_HI: await autoTranslate(title, 'hi'),
+          desc: desc,
+          desc_TE: await autoTranslate(desc, 'te'),
+          desc_HI: await autoTranslate(desc, 'hi')
+        };
         await updateDoc(doc(db, "services", adminModal.payload.id), updatedService);
         setDbServices(prev => prev.map(s => s.id === adminModal.payload.id ? { ...s, ...updatedService } : s));
       } else if (adminModal.type === 'add_gallery') {
@@ -346,26 +418,43 @@ ${formData.description}`;
         const docRef = await addDoc(collection(db, "gallery"), newImg);
         setDbGallery(prev => [...prev, { id: docRef.id, ...newImg }]);
       } else if (adminModal.type === 'add_testimonial') {
-        const newTest = { name: modalForm.name || "Client", review: modalForm.review || "" };
+        const name = modalForm.name || "Client";
+        const review = modalForm.review || "";
+
+        const newTest = { 
+          name: name, 
+          review: review,
+          review_TE: await autoTranslate(review, 'te'),
+          review_HI: await autoTranslate(review, 'hi')
+        };
         const docRef = await addDoc(collection(db, "testimonials"), newTest);
         setDbTestimonials(prev => [...prev, { id: docRef.id, ...newTest }]);
       } else if (adminModal.type === 'edit_testimonial') {
-        const updatedTest = { name: modalForm.name, review: modalForm.review };
+        const name = modalForm.name;
+        const review = modalForm.review;
+
+        const updatedTest = { 
+          name: name, 
+          review: review,
+          review_TE: await autoTranslate(review, 'te'),
+          review_HI: await autoTranslate(review, 'hi')
+        };
         await updateDoc(doc(db, "testimonials", adminModal.payload.id), updatedTest);
         setDbTestimonials(prev => prev.map(t => t.id === adminModal.payload.id ? { ...t, ...updatedTest } : t));
       }
       closeModal();
     } catch (error) {
       console.error("Error saving:", error);
-      alert("Failed to save. Please try again. " + error.message);
+      await showDialog({ type: 'alert', message: "Failed to save. Please try again. " + error.message });
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleDelete = async (collectionName, id, stateUpdater) => {
-    if (!id) return alert("Cannot delete default static items.");
-    if (window.confirm("Are you sure you want to delete this item?")) {
+    if (!id) return await showDialog({ type: 'alert', message: "Cannot delete default static items." });
+    const confirmed = await showDialog({ type: 'confirm', message: "Are you sure you want to delete this item?" });
+    if (confirmed) {
       await deleteDoc(doc(db, collectionName, id));
       stateUpdater(prev => prev.filter(item => item.id !== id));
     }
@@ -455,6 +544,36 @@ ${formData.description}`;
     </div>
   );
 
+  const dialogUI = dialog.isOpen && (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div className="bg-[#111111] border border-[#D4AF37]/50 rounded-3xl p-6 md:p-8 w-full max-w-sm shadow-2xl text-center">
+        <h3 className="text-xl font-bold text-white mb-4">{dialog.message}</h3>
+        
+        {dialog.type === 'prompt' && (
+          <input 
+            type={dialog.isPassword ? "password" : "text"} 
+            value={dialog.inputValue} 
+            onChange={(e) => setDialog(prev => ({...prev, inputValue: e.target.value}))}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); dialog.onConfirm(dialog.inputValue); } }}
+            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-[#D4AF37] outline-none mb-6"
+            autoFocus
+          />
+        )}
+
+        <div className="flex justify-center gap-3 mt-2">
+          {dialog.type !== 'alert' && (
+            <button onClick={dialog.onCancel} className="px-6 py-2 rounded-full border border-white/10 text-white hover:bg-white/5 transition">
+              Cancel
+            </button>
+          )}
+          <button onClick={() => dialog.onConfirm(dialog.type === 'prompt' ? dialog.inputValue : true)} className="px-6 py-2 rounded-full bg-[#D4AF37] text-black font-bold hover:scale-105 transition">
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const allEvents = dbEvents;
 
   const defaultServices = [
@@ -540,13 +659,13 @@ ${formData.description}`;
           )}
 
           <p className="uppercase tracking-[6px] text-[#D4AF37] mb-4 font-semibold">
-            {selectedEventDetail.categoryDisplay}
+            {selectedEventDetail[`categoryDisplay_${language}`] || selectedEventDetail.categoryDisplay}
           </p>
           <h2 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 md:mb-6">
-            {selectedEventDetail.title}
+            {selectedEventDetail[`title_${language}`] || selectedEventDetail.title}
           </h2>
           <p className="text-gray-300 max-w-2xl mx-auto text-base md:text-lg leading-relaxed mb-6">
-            {selectedEventDetail.description}
+            {selectedEventDetail[`description_${language}`] || selectedEventDetail.description}
           </p>
           {selectedEventDetail.price && (
             <p className="text-[#D4AF37] font-bold text-xl inline-block border border-[#D4AF37]/30 px-6 py-3 rounded-full bg-[#D4AF37]/5">
@@ -568,9 +687,10 @@ ${formData.description}`;
             />
             {isAdmin && selectedEventDetail.id && selectedEventDetail.images?.length > 1 && (
               <button
-                onClick={async () => {
+                onClick={async (e) => {
                   e.stopPropagation();
-                  if(!window.confirm("Delete this image?")) return;
+                  const confirmed = await showDialog({ type: 'confirm', message: "Delete this image?" });
+                  if(!confirmed) return;
                   const updatedImages = selectedEventDetail.images.filter((_, i) => i !== featuredImageIdx);
                   await updateDoc(doc(db, "events", selectedEventDetail.id), { images: updatedImages });
                   setDbEvents(prev => prev.map(e => e.id === selectedEventDetail.id ? { ...e, images: updatedImages } : e));
@@ -640,6 +760,7 @@ ${formData.description}`;
         </a>
         {adminModalUI}
         {lightboxUI}
+        {dialogUI}
       </div>
     );
   }
@@ -814,11 +935,11 @@ ${formData.description}`;
               <div className="px-5 py-5 md:px-8 md:py-6">
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-[#D4AF37] text-sm uppercase tracking-[3px] font-semibold">
-                    {event.categoryDisplay}
+                    {event[`categoryDisplay_${language}`] || event.categoryDisplay}
                   </span>
                 </div>
 
-                <h3 className="text-xl md:text-2xl font-bold mb-2">{event.title}</h3>
+                <h3 className="text-xl md:text-2xl font-bold mb-2">{event[`title_${language}`] || event.title}</h3>
 
                 <div className="flex items-center justify-between mt-3 md:mt-4">
                   {event.price && (
@@ -876,11 +997,11 @@ ${formData.description}`;
                 </div>
 
                 <h3 className="text-xl md:text-2xl font-bold mb-3 md:mb-4 text-white tracking-wide">
-                  {service.title}
+                  {service[`title_${language}`] || service.title}
                 </h3>
 
                 <p className="text-gray-400 leading-relaxed font-light text-sm md:text-base">
-                  {service.desc}
+                  {service[`desc_${language}`] || service.desc}
                 </p>
               </div>
 
@@ -997,7 +1118,7 @@ ${formData.description}`;
               </div>
 
               <p className="text-gray-300 leading-relaxed mb-6 md:mb-8 text-base md:text-lg font-light italic relative z-10">
-                "{item.review}"
+                "{item[`review_${language}`] || item.review}"
               </p>
 
               <div className="flex items-center gap-4 relative z-10">
@@ -1124,7 +1245,7 @@ ${formData.description}`;
                 className="bg-black/40 border border-white/10 rounded-full px-5 md:px-6 py-3 md:py-4 outline-none focus:border-[#D4AF37] text-gray-400 text-sm md:text-base"
               >
                 <option value="" disabled className="bg-black text-white">{t.formSelectEvent}</option>
-                {[...new Set(allEvents.map(e => e.categoryDisplay))].filter(Boolean).map((type, idx) => (
+                {[...new Set(allEvents.map(e => e[`categoryDisplay_${language}`] || e.categoryDisplay))].filter(Boolean).map((type, idx) => (
                   <option key={idx} value={type} className="bg-black text-white">{type}</option>
                 ))}
                 <option value="Other" className="bg-black text-white">Other</option>
@@ -1176,11 +1297,13 @@ ${formData.description}`;
         <div className="flex justify-center items-center gap-4 text-xs md:text-sm mt-6 md:mt-8">
           <p>{t.footerRights}</p>
           <button 
-            onClick={() => {
+            onClick={async () => {
               if (isAdmin) setIsAdmin(false);
               else {
-                if (prompt("Enter Admin Password:") === "admin123") setIsAdmin(true);
-                else alert("Incorrect password!");
+                const pwd = await showDialog({ type: 'prompt', message: "Enter Admin Password:", isPassword: true });
+                if (pwd === false) return; // User cancelled
+                if (pwd === "admin123") setIsAdmin(true);
+                else await showDialog({ type: 'alert', message: "Incorrect password!" });
               }
             }} 
             className="text-gray-700 hover:text-[#D4AF37] flex items-center gap-1 transition"
@@ -1204,6 +1327,7 @@ ${formData.description}`;
       </a>
       {adminModalUI}
       {lightboxUI}
+      {dialogUI}
     </div>
   );
 }
